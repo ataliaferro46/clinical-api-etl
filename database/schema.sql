@@ -48,3 +48,27 @@ CREATE INDEX IF NOT EXISTS idx_clinical_measurements_timestamp ON clinical_measu
 -- ETL Jobs indexes
 CREATE INDEX IF NOT EXISTS idx_etl_jobs_status ON etl_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_etl_jobs_created_at ON etl_jobs(created_at);
+
+CREATE TABLE IF NOT EXISTS measurements (
+  id BIGSERIAL PRIMARY KEY,
+  study_id TEXT NOT NULL,
+  participant_id TEXT NOT NULL,
+  site_id TEXT NOT NULL,
+  measurement_type TEXT NOT NULL,
+  unit TEXT NOT NULL,
+  value_numeric DOUBLE PRECISION NULL,
+  systolic INT NULL,
+  diastolic INT NULL,
+  quality_score DOUBLE PRECISION NOT NULL,
+  ts TIMESTAMPTZ NOT NULL,
+  source_file TEXT,
+  is_valid BOOLEAN NOT NULL DEFAULT TRUE,
+  quality_flags TEXT[] NOT NULL DEFAULT '{}'
+);
+
+-- helpful indexes
+CREATE INDEX IF NOT EXISTS m_idx_study_ts ON measurements (study_id, ts DESC);
+CREATE INDEX IF NOT EXISTS m_idx_participant_type_ts ON measurements (study_id, participant_id, measurement_type, ts);
+CREATE INDEX IF NOT EXISTS m_idx_site ON measurements (study_id, site_id);
+CREATE INDEX IF NOT EXISTS m_idx_quality ON measurements (study_id, quality_score);
+CREATE INDEX IF NOT EXISTS m_idx_recent ON measurements (ts DESC);

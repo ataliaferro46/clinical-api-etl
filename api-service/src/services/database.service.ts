@@ -22,7 +22,7 @@ export class DatabaseService {
       INSERT INTO etl_jobs (id, filename, study_id, status, created_at, updated_at)
       VALUES ($1, $2, $3, $4, $5, $6)
     `;
-    
+
     await this.pool.query(query, [
       job.id,
       job.filename,
@@ -38,7 +38,7 @@ export class DatabaseService {
    */
   async updateETLJobStatus(jobId: string, status: string, errorMessage?: string): Promise<void> {
     let query = `
-      UPDATE etl_jobs 
+      UPDATE etl_jobs
       SET status = $1, updated_at = $2
     `;
     const params = [status, new Date()];
@@ -68,9 +68,9 @@ export class DatabaseService {
       FROM etl_jobs
       WHERE id = $1
     `;
-    
+
     const result = await this.pool.query(query, [jobId]);
-    
+
     if (result.rows.length === 0) {
       return null;
     }
@@ -93,7 +93,7 @@ export class DatabaseService {
    */
   async queryMeasurements(filters: DataFilters): Promise<ClinicalMeasurement[]> {
     let query = `
-      SELECT id, study_id, participant_id, measurement_type, value, unit, 
+      SELECT id, study_id, participant_id, measurement_type, value, unit,
              timestamp, site_id, quality_score, processed_at
       FROM clinical_measurements
       WHERE 1=1
@@ -134,7 +134,7 @@ export class DatabaseService {
     query += ' ORDER BY timestamp DESC LIMIT 1000';
 
     const result = await this.pool.query(query, params);
-    
+
     return result.rows.map(row => ({
       id: row.id,
       studyId: row.study_id,

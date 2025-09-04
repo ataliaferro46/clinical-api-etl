@@ -12,6 +12,14 @@ export interface ETLJob {
   completedAt?: Date;
   errorMessage?: string;
 }
+const ETL_BASE = process.env.ETL_SERVICE_URL || 'http://etl:8000';
+
+export type JobStatus = {
+  jobId: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  progress: number; // 0..100
+  message?: string;
+};
 
 export class ETLService {
   private dbService: DatabaseService;
@@ -27,7 +35,7 @@ export class ETLService {
    */
   async submitJob(filename: string, studyId?: string): Promise<ETLJob> {
     const jobId = uuidv4();
-    
+
     // Create job record in database
     const job: ETLJob = {
       id: jobId,
@@ -68,15 +76,40 @@ export class ETLService {
     return await this.dbService.getETLJob(jobId);
   }
 
-  // TODO: CANDIDATE TO IMPLEMENT
-  // /**
-  //  * Get ETL job status from ETL service
-  //  */
-  // async getJobStatus(jobId: string): Promise<{ status: string; progress?: number; message?: string }> {
+
   //   // Implementation needed:
   //   // 1. Validate jobId exists in database
   //   // 2. Call ETL service to get real-time status
   //   // 3. Handle connection errors gracefully
   //   // 4. Return formatted status response
-  // }
+  // TODO: CANDIDATE TO IMPLEMENT
+  // /**
+  //  * Get ETL job status from ETL service
+  //  */
+  async fetchJobStatus(id: string): Promise<JobStatus> {
+    try {
+      const resp = await axios.get(`${ETL_BASE}/jobs/${id}/status`, { timeout: 5000 });
+
+      // Some ETL services return { data: {...} }, some return the object directly.
+      const raw = resp.data?.data ?? resp.data;
+
+      const jobId = raw?.jobId ?? raw?.id ?? id;
+      const status = raw?.status;
+      const progress = Number(raw?.progress ?? 0);
+      const message = raw?.message;
+
+      if (!jobId || !status || Number.isNaN(progress)) {
+        throw new Error('unexpected_status_shape');
+      }
+
+      return { jobId, status, progress, message };
+    } catch (e: any) {
+      if (e?.response?.status === 404) {
+        const err: any = new Error('not_found');
+        err.code = 'ETL_NOT_FOUND';
+        throw err;
+      }
+      throw e;
+    }
+  }
 }
