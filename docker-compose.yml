@@ -11,19 +11,25 @@ services:
       - DATABASE_URL=postgresql://user:pass@postgres:5432/clinical_data
       - ETL_SERVICE_URL=http://etl:8000
     restart: unless-stopped
-  
+
   etl:
-    build: ./etl-service  
-    ports:
-      - "8000:8000"
+    build:
+      context: ./etl-service
+    environment:
+      - DATA_DIR=/data
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=clinical_data
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=pass
+    volumes:
+      - ./data:/data:ro
+    # Recommended: run uvicorn without --reload inside the container
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000
     depends_on:
       - postgres
-    environment:
-      - DATABASE_URL=postgresql://user:pass@postgres:5432/clinical_data
-    volumes:
-      - ./data:/app/data
-    restart: unless-stopped
-  
+    ports:
+    - "8000:8000" 
+
   postgres:
     image: public.ecr.aws/docker/library/postgres:15
     environment:
@@ -38,5 +44,3 @@ services:
     tmpfs:
       - /var/lib/postgresql/data:noexec,nosuid,size=512m
     restart: unless-stopped
-
-
