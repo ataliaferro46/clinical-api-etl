@@ -8,6 +8,7 @@ Key points:
 - **ETL Implementation**: Python FastAPI service handles job submission, background CSV ingestion, validation, transformation, and database loading.  
 - **API Layer**: TypeScript/Node.js service coordinates job submission, job status retrieval, and querying processed data.  
 - **AI-assisted Development**: AI tools were used to break down tasks, generate initial scaffolding for API/ETL/database code, debug container issues, and refine schema design decisions. Final code and notes reflect collaboration between AI and myself.  
+- **Testing Framework**: Generated tests with directions on how to run them at the bottom of this file.  
 
 The rest of this document details:  
 1. Problem-solving approach  
