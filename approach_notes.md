@@ -209,13 +209,13 @@ This project includes tests for both the **API service** (Node/Express + TypeScr
 ## How to Run the Tests
 
 ## Setup .env files in both api-service etl-service directories
-####Populate api-service.env with:
+###Populate api-service.env with:
 `PORT=3000
 DATABASE_URL=postgresql://user:pass@localhost:5432/clinical_data
 ETL_SERVICE_URL=http://localhost:8000
 NODE_ENV=development`
 
-####Populate etl-service.env with:
+###Populate etl-service.env with:
 `DATA_DIR=./data`
 
 ### API Service (Node/TypeScript)
