@@ -243,6 +243,7 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements-dev.txt
 pytest -q
+E2E=1 pytest -q -k test_etl_job_inserts_into_db
 ```
 
 ✅ **Deliverables complete**:
