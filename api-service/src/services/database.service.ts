@@ -8,7 +8,7 @@ const pool = new Pool({ connectionString });
 export type DataFilters = {
   studyId?: string;
   participantId?: string;
-  measurementType?: string;   // 'glucose' | 'cholesterol' | 'blood_pressure' | etc.
+  measurementType?: string;   // e.g., 'glucose', 'cholesterol', 'blood_pressure'
   startTs?: string;           // ISO string
   endTs?: string;             // ISO string
   isValid?: boolean;
@@ -27,13 +27,19 @@ export type ClinicalMeasurement = {
   quality_score: number;
   is_valid: boolean;
   quality_flags: string[];
-  ts: string; // ISO
+  ts: string; // ISO string
+};
+
+export type ETLJob = {
+  id: string;
+  filename: string;
+  studyId?: string; // optional, not null
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  createdAt: Date;
+  updatedAt: Date;
 };
 
 export class DatabaseService {
-  /**
-   * Unified query hitting fact_measurement + dimensions
-   */
   async queryMeasurements(filters: DataFilters): Promise<ClinicalMeasurement[]> {
     const {
       studyId,
@@ -85,18 +91,78 @@ export class DatabaseService {
     ];
 
     const { rows } = await pool.query<ClinicalMeasurement>(sql, params);
-
-    // Ensure ISO strings on ts (pg returns Date objects if not cast)
     return rows.map(r => ({
       ...r,
       ts: new Date(r.ts as unknown as string).toISOString(),
     }));
   }
 
-  /**
-   * Convenience wrapper used by DataService.getStudyData
-   */
   async queryByStudy(studyId: string): Promise<ClinicalMeasurement[]> {
     return this.queryMeasurements({ studyId, limit: 1000, offset: 0 });
+  }
+
+  async createETLJob(job: { id: string; filename: string; studyId?: string | null }): Promise<void>;
+  async createETLJob(id: string, filename: string, studyId?: string | null): Promise<void>;
+  async createETLJob(
+    a: string | { id: string; filename: string; studyId?: string | null },
+    b?: string,
+    c?: string | null
+  ): Promise<void> {
+    let id: string;
+    let filename: string;
+    let studyId: string | null;
+
+    if (typeof a === 'string') {
+      id = a;
+      filename = b as string;
+      studyId = c ?? null;
+    } else {
+      id = a.id;
+      filename = a.filename;
+      studyId = a.studyId ?? null;
+    }
+
+    const sql = `
+      INSERT INTO etl_jobs (id, filename, study_id, status)
+      VALUES ($1, $2, $3, 'pending')
+      ON CONFLICT (id) DO NOTHING;
+    `;
+    await pool.query(sql, [id, filename, studyId]);
+  }
+
+  // Keep a 3rd arg for compatibility; we ignore it here.
+  async updateETLJobStatus(
+    id: string,
+    status: 'pending' | 'running' | 'completed' | 'failed',
+    _message?: string
+  ): Promise<void> {
+    const sql = `
+      UPDATE etl_jobs
+      SET status = $2, updated_at = NOW()
+      WHERE id = $1;
+    `;
+    await pool.query(sql, [id, status]);
+  }
+
+  async getETLJob(id: string): Promise<ETLJob | null> {
+    const { rows } = await pool.query(
+      `SELECT id, filename, study_id, status, created_at, updated_at
+       FROM etl_jobs WHERE id = $1`,
+      [id]
+    );
+    const r = rows[0];
+    if (!r) return null;
+
+    const normalizedStatus =
+      r.status === 'queued' ? 'pending' : (r.status as 'pending' | 'running' | 'completed' | 'failed');
+
+    return {
+      id: r.id,
+      filename: r.filename,
+      studyId: r.study_id ?? undefined,
+      status: normalizedStatus,
+      createdAt: new Date(r.created_at),
+      updatedAt: new Date(r.updated_at),
+    };
   }
 }

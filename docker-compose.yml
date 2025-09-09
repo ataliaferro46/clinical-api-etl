@@ -28,15 +28,14 @@ services:
     depends_on:
       - postgres
     ports:
-    - "8000:8000" 
+    - "8000:8000"
 
   postgres:
-    image: public.ecr.aws/docker/library/postgres:15
+    image: postgres:15
     environment:
       - POSTGRES_DB=clinical_data
       - POSTGRES_USER=user
       - POSTGRES_PASSWORD=pass
-      - POSTGRES_HOST_AUTH_METHOD=trust
     ports:
       - "5432:5432"
     volumes:
