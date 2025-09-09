@@ -211,6 +211,7 @@ This project includes tests for both the **API service** (Node/Express + TypeScr
 ### API Service (Node/TypeScript)
 `bash
 cd api-service
+npm install
 npm test`
 ### ETL Service (Python/FastAPI)
 `cd etl-service
