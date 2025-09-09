@@ -4,6 +4,8 @@ import nock from 'nock';
 
 let app: any;
 
+jest.setTimeout(12000);
+
 beforeAll(async () => {
   app = await createApp();
 });

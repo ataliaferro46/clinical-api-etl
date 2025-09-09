@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosInstance } from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import { DatabaseService } from './database.service';
 
@@ -24,10 +24,19 @@ export type JobStatus = {
 export class ETLService {
   private dbService: DatabaseService;
   private etlServiceUrl: string;
+  private http: AxiosInstance;  // <-- add this
 
   constructor() {
     this.dbService = new DatabaseService();
     this.etlServiceUrl = process.env.ETL_SERVICE_URL || 'http://etl:8000';
+
+    // Initialize axios client once; reuse for all ETL calls.
+    this.http = axios.create({
+      baseURL: this.etlServiceUrl,
+      timeout: 5000,
+      // Let us check status codes ourselves (so tests can assert 404 vs 502/504).
+      validateStatus: () => true,
+    });
   }
 
   /**
@@ -76,38 +85,32 @@ export class ETLService {
     return await this.dbService.getETLJob(jobId);
   }
 
-
-  //   // Implementation needed:
-  //   // 1. Validate jobId exists in database
-  //   // 2. Call ETL service to get real-time status
-  //   // 3. Handle connection errors gracefully
-  //   // 4. Return formatted status response
-  // TODO: CANDIDATE TO IMPLEMENT
-  // /**
-  //  * Get ETL job status from ETL service
-  //  */
   async fetchJobStatus(id: string): Promise<JobStatus> {
     try {
-      const resp = await axios.get(`${ETL_BASE}/jobs/${id}/status`, { timeout: 5000 });
+      const resp = await this.http.get(`/jobs/${id}/status`);
 
-      // Some ETL services return { data: {...} }, some return the object directly.
-      const raw = resp.data?.data ?? resp.data;
-
-      const jobId = raw?.jobId ?? raw?.id ?? id;
-      const status = raw?.status;
-      const progress = Number(raw?.progress ?? 0);
-      const message = raw?.message;
-
-      if (!jobId || !status || Number.isNaN(progress)) {
-        throw new Error('unexpected_status_shape');
+      if (resp.status === 404) {
+        const err: any = new Error('Job not found');
+        err.code = 'ETL_NOT_FOUND';
+        err.statusCode = 404;
+        throw err;
       }
 
-      return { jobId, status, progress, message };
-    } catch (e: any) {
-      if (e?.response?.status === 404) {
-        const err: any = new Error('not_found');
-        err.code = 'ETL_NOT_FOUND';
+      if (resp.status >= 200 && resp.status < 300) {
+        return resp.data as JobStatus;
+      }
+
+      // Any other non-2xx from ETL → treat as a bad gateway
+      {
+        const err: any = new Error(`ETL status error ${resp.status}`);
+        err.statusCode = 502;
         throw err;
+      }
+    } catch (e: any) {
+      // Axios timeout → surface as 504 to caller
+      if (e?.code === 'ECONNABORTED') {
+        e.statusCode = 504;
+        e.message = 'ETL service timeout';
       }
       throw e;
     }
