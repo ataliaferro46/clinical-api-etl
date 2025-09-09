@@ -211,7 +211,7 @@ This project includes tests for both the **API service** (Node/Express + TypeScr
 
 ## Setup .env files in both api-service etl-service directories
 ###Populate api-service.env with:
-`PORT=3000
+```PORT=3000
 DATABASE_URL=postgresql://user:pass@localhost:5432/clinical_data
 ETL_SERVICE_URL=http://localhost:8000
 NODE_ENV=development`
@@ -219,17 +219,23 @@ NODE_ENV=development`
 ###Populate etl-service.env with:
 `DATA_DIR=./data`
 
+###Setup Docker container
+```docker compose down -v
+docker compose build --no-cache
+docker compose up -d
+docker compose ps
+
 ### API Service (Node/TypeScript)
-`bash
+```bash
 cd api-service
 npm install
-npm test`
+npm test
 ### ETL Service (Python/FastAPI)
-`cd etl-service
+```cd etl-service
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements-dev.txt
-pytest -q`
+pytest -q
 
 ✅ **Deliverables complete**:
 - API job status endpoint (Task 1)  
