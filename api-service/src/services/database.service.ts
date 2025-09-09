@@ -1,158 +1,102 @@
 import { Pool } from 'pg';
-import { ETLJob } from './etl.service';
-import { DataFilters, ClinicalMeasurement } from './data.service';
+
+const connectionString =
+  process.env.DATABASE_URL || 'postgresql://user:pass@postgres:5432/clinical_data';
+
+const pool = new Pool({ connectionString });
+
+export type DataFilters = {
+  studyId?: string;
+  participantId?: string;
+  measurementType?: string;   // 'glucose' | 'cholesterol' | 'blood_pressure' | etc.
+  startTs?: string;           // ISO string
+  endTs?: string;             // ISO string
+  isValid?: boolean;
+  limit?: number;
+  offset?: number;
+};
+
+export type ClinicalMeasurement = {
+  study_id: string;
+  participant_id: string;
+  measurement_type: string;
+  unit: string | null;
+  value_numeric: number | null;
+  systolic: number | null;
+  diastolic: number | null;
+  quality_score: number;
+  is_valid: boolean;
+  quality_flags: string[];
+  ts: string; // ISO
+};
 
 export class DatabaseService {
-  private pool: Pool;
-
-  constructor() {
-    this.pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      max: 10,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
-    });
-  }
-
   /**
-   * Create ETL job record
-   */
-  async createETLJob(job: ETLJob): Promise<void> {
-    const query = `
-      INSERT INTO etl_jobs (id, filename, study_id, status, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6)
-    `;
-
-    await this.pool.query(query, [
-      job.id,
-      job.filename,
-      job.studyId,
-      job.status,
-      job.createdAt,
-      job.updatedAt
-    ]);
-  }
-
-  /**
-   * Update ETL job status
-   */
-  async updateETLJobStatus(jobId: string, status: string, errorMessage?: string): Promise<void> {
-    let query = `
-      UPDATE etl_jobs
-      SET status = $1, updated_at = $2
-    `;
-    const params = [status, new Date()];
-
-    if (status === 'completed') {
-      query += ', completed_at = $3';
-      params.push(new Date());
-    }
-
-    if (errorMessage) {
-      query += ', error_message = $' + (params.length + 1);
-      params.push(errorMessage);
-    }
-
-    query += ' WHERE id = $' + (params.length + 1);
-    params.push(jobId);
-
-    await this.pool.query(query, params);
-  }
-
-  /**
-   * Get ETL job by ID
-   */
-  async getETLJob(jobId: string): Promise<ETLJob | null> {
-    const query = `
-      SELECT id, filename, study_id, status, created_at, updated_at, completed_at, error_message
-      FROM etl_jobs
-      WHERE id = $1
-    `;
-
-    const result = await this.pool.query(query, [jobId]);
-
-    if (result.rows.length === 0) {
-      return null;
-    }
-
-    const row = result.rows[0];
-    return {
-      id: row.id,
-      filename: row.filename,
-      studyId: row.study_id,
-      status: row.status,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      completedAt: row.completed_at,
-      errorMessage: row.error_message
-    };
-  }
-
-  /**
-   * Query clinical measurements with filters
+   * Unified query hitting fact_measurement + dimensions
    */
   async queryMeasurements(filters: DataFilters): Promise<ClinicalMeasurement[]> {
-    let query = `
-      SELECT id, study_id, participant_id, measurement_type, value, unit,
-             timestamp, site_id, quality_score, processed_at
-      FROM clinical_measurements
-      WHERE 1=1
+    const {
+      studyId,
+      participantId,
+      measurementType,
+      startTs,
+      endTs,
+      isValid,
+      limit = 100,
+      offset = 0,
+    } = filters;
+
+    const sql = `
+      SELECT
+        fm.study_id,
+        fm.participant_id,
+        mt.name AS measurement_type,
+        u.name  AS unit,
+        fm.value_numeric,
+        fm.systolic,
+        fm.diastolic,
+        fm.quality_score,
+        fm.is_valid,
+        fm.quality_flags,
+        fm.ts
+      FROM fact_measurement fm
+      JOIN dim_measurement_type mt ON mt.id = fm.measurement_type_id
+      JOIN dim_unit              u ON u.id  = fm.unit_id
+      WHERE
+        ($1::text         IS NULL OR fm.study_id = $1)
+        AND ($2::text     IS NULL OR fm.participant_id = $2)
+        AND ($3::text     IS NULL OR mt.name = $3)
+        AND ($4::timestamptz IS NULL OR fm.ts >= $4)
+        AND ($5::timestamptz IS NULL OR fm.ts <  $5)
+        AND ($6::boolean  IS NULL OR fm.is_valid = $6)
+      ORDER BY fm.ts DESC
+      LIMIT $7 OFFSET $8;
     `;
-    const params: any[] = [];
-    let paramIndex = 1;
 
-    if (filters.studyId) {
-      query += ` AND study_id = $${paramIndex}`;
-      params.push(filters.studyId);
-      paramIndex++;
-    }
+    const params = [
+      studyId ?? null,
+      participantId ?? null,
+      measurementType ?? null,
+      startTs ?? null,
+      endTs ?? null,
+      typeof isValid === 'boolean' ? isValid : null,
+      Math.min(Number(limit) || 100, 1000),
+      Number(offset) || 0,
+    ];
 
-    if (filters.participantId) {
-      query += ` AND participant_id = $${paramIndex}`;
-      params.push(filters.participantId);
-      paramIndex++;
-    }
+    const { rows } = await pool.query<ClinicalMeasurement>(sql, params);
 
-    if (filters.measurementType) {
-      query += ` AND measurement_type = $${paramIndex}`;
-      params.push(filters.measurementType);
-      paramIndex++;
-    }
-
-    if (filters.startDate) {
-      query += ` AND timestamp >= $${paramIndex}`;
-      params.push(filters.startDate);
-      paramIndex++;
-    }
-
-    if (filters.endDate) {
-      query += ` AND timestamp <= $${paramIndex}`;
-      params.push(filters.endDate);
-      paramIndex++;
-    }
-
-    query += ' ORDER BY timestamp DESC LIMIT 1000';
-
-    const result = await this.pool.query(query, params);
-
-    return result.rows.map(row => ({
-      id: row.id,
-      studyId: row.study_id,
-      participantId: row.participant_id,
-      measurementType: row.measurement_type,
-      value: row.value,
-      unit: row.unit,
-      timestamp: row.timestamp,
-      siteId: row.site_id,
-      qualityScore: row.quality_score,
-      processedAt: row.processed_at
+    // Ensure ISO strings on ts (pg returns Date objects if not cast)
+    return rows.map(r => ({
+      ...r,
+      ts: new Date(r.ts as unknown as string).toISOString(),
     }));
   }
 
   /**
-   * Close database connection
+   * Convenience wrapper used by DataService.getStudyData
    */
-  async close(): Promise<void> {
-    await this.pool.end();
+  async queryByStudy(studyId: string): Promise<ClinicalMeasurement[]> {
+    return this.queryMeasurements({ studyId, limit: 1000, offset: 0 });
   }
 }

@@ -1,5 +1,18 @@
 import { DatabaseService } from './database.service';
 
+import { pool } from '../lib/db';
+
+export type DataFilters = {
+  studyId?: string;
+  participantId?: string;
+  measurementType?: string; // e.g., 'glucose', 'cholesterol', 'blood_pressure'
+  startTs?: string;         // ISO date string
+  endTs?: string;           // ISO date string
+  isValid?: boolean;
+  limit?: number;
+  offset?: number;
+};
+
 export interface DataFilters {
   studyId?: string;
   participantId?: string;

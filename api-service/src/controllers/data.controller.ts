@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { DataService } from '../services/data.service';
-import { successResponse, errorResponse } from '../utils/response';
+import { successResponse } from '../utils/response';
 
 export class DataController {
   private dataService: DataService;
@@ -9,46 +9,45 @@ export class DataController {
     this.dataService = new DataService();
   }
 
-  /**
-   * Query processed clinical data
-   * GET /api/data
-   */
-  getData = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  // GET /api/data
+  getData = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { studyId, participantId, measurementType, startDate, endDate } = req.query;
-      
-      const filters = {
+      const {
+        studyId,
+        participantId,
+        measurementType,
+        startTs,
+        endTs,
+        isValid,
+        limit,
+        offset,
+      } = req.query;
+
+      const rows = await this.dataService.getData({
         studyId: studyId as string,
         participantId: participantId as string,
         measurementType: measurementType as string,
-        startDate: startDate as string,
-        endDate: endDate as string
-      };
+        startTs: startTs as string,
+        endTs: endTs as string,
+        isValid: isValid === 'true' ? true : isValid === 'false' ? false : undefined,
+        limit: limit ? parseInt(limit as string, 10) : 100,
+        offset: offset ? parseInt(offset as string, 10) : 0,
+      });
 
-      const data = await this.dataService.getData(filters);
-      successResponse(res, data, 'Data retrieved successfully');
-    } catch (error) {
-      next(error);
+      return successResponse(res, rows, 'Data retrieved successfully');
+    } catch (err) {
+      next(err);
     }
   };
 
-  /**
-   * Get study data
-   * GET /api/data/studies/:id
-   */
-  getStudyData = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  // GET /api/data/studies/:id
+  getStudyData = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const data = await this.dataService.getStudyData(id);
-      
-      if (!data || data.length === 0) {
-        errorResponse(res, 'Study not found', 404);
-        return;
-      }
-
-      successResponse(res, data, 'Study data retrieved successfully');
-    } catch (error) {
-      next(error);
+      const rows = await this.dataService.getStudyData(id);
+      return successResponse(res, rows, `Study ${id} data retrieved`);
+    } catch (err) {
+      next(err);
     }
   };
 }
