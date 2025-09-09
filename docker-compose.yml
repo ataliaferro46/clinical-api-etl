@@ -1,15 +1,18 @@
 services:
-  api:
-    build: ./api-service
-    ports:
-      - "3000:3000"
-    depends_on:
-      - postgres
-      - etl
+  postgres:
+    # Use official multi-arch image (not the public.ecr mirror)
+    image: postgres:15
+    # On Apple Silicon you can omit platform (native arm64 works), but this is safe cross-host:
+    # platform: linux/arm64/v8     # <- uncomment if you’re on Apple Silicon and prefer native
+    # platform: linux/amd64        # <- or force amd64 if you want emulation via QEMU
     environment:
-      - NODE_ENV=development
-      - DATABASE_URL=postgresql://user:pass@postgres:5432/clinical_data
-      - ETL_SERVICE_URL=http://etl:8000
+      - POSTGRES_DB=clinical_data
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
     restart: unless-stopped
 
   etl:
@@ -23,23 +26,21 @@ services:
       - POSTGRES_PASSWORD=pass
     volumes:
       - ./data:/data:ro
-    # Recommended: run uvicorn without --reload inside the container
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000
     depends_on:
       - postgres
-    ports:
-    - "8000:8000"
+    # platform: linux/arm64/v8  # optional hint if needed
 
-  postgres:
-    image: postgres:15
-    environment:
-      - POSTGRES_DB=clinical_data
-      - POSTGRES_USER=user
-      - POSTGRES_PASSWORD=pass
+  api:
+    build: ./api-service
     ports:
-      - "5432:5432"
-    volumes:
-      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
-    tmpfs:
-      - /var/lib/postgresql/data:noexec,nosuid,size=512m
+      - "3000:3000"
+    depends_on:
+      - postgres
+      - etl
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://user:pass@postgres:5432/clinical_data
+      - ETL_SERVICE_URL=http://etl:8000
     restart: unless-stopped
+    # platform: linux/arm64/v8  # optional hint if needed
